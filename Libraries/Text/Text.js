@@ -1,249 +1,225 @@
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  *
- * @providesModule Text
- * @flow
+ * @flow strict-local
+ * @format
  */
-'use strict';
 
-var NativeMethodsMixin = require('NativeMethodsMixin');
-var Platform = require('Platform');
-var React = require('React');
-var ReactInstanceMap = require('ReactInstanceMap');
-var ReactNativeViewAttributes = require('ReactNativeViewAttributes');
-var StyleSheetPropType = require('StyleSheetPropType');
-var TextStylePropTypes = require('TextStylePropTypes');
-var Touchable = require('Touchable');
+import type {PressEvent} from '../Types/CoreEventTypes';
 
-var createReactNativeComponentClass =
-  require('createReactNativeComponentClass');
-var merge = require('merge');
-
-var stylePropType = StyleSheetPropType(TextStylePropTypes);
-
-var viewConfig = {
-  validAttributes: merge(ReactNativeViewAttributes.UIView, {
-    isHighlighted: true,
-    numberOfLines: true,
-    allowFontScaling: true,
-  }),
-  uiViewClassName: 'RCTText',
-};
+import Platform from '../Utilities/Platform';
+import * as PressabilityDebug from '../Pressability/PressabilityDebug';
+import usePressability from '../Pressability/usePressability';
+import StyleSheet from '../StyleSheet/StyleSheet';
+import processColor from '../StyleSheet/processColor';
+import TextAncestor from './TextAncestor';
+import {NativeText, NativeVirtualText} from './TextNativeComponent';
+import {type TextProps} from './TextProps';
+import * as React from 'react';
+import {useContext, useMemo, useState} from 'react';
 
 /**
- * A React component for displaying text which supports nesting,
- * styling, and touch handling.  In the following example, the nested title and
- * body text will inherit the `fontFamily` from `styles.baseText`, but the title
- * provides its own additional styles.  The title and body will stack on top of
- * each other on account of the literal newlines:
+ * Text is the fundamental component for displaying text.
  *
- * ```
- * renderText: function() {
- *   return (
- *     <Text style={styles.baseText}>
- *       <Text style={styles.titleText} onPress={this.onPressTitle}>
- *         {this.state.titleText + '\n\n'}
- *       </Text>
- *       <Text numberOfLines={5}>
- *         {this.state.bodyText}
- *       </Text>
- *     </Text>
- *   );
- * },
- * ...
- * var styles = StyleSheet.create({
- *   baseText: {
- *     fontFamily: 'Cochin',
- *   },
- *   titleText: {
- *     fontSize: 20,
- *     fontWeight: 'bold',
- *   },
- * };
- * ```
+ * @see https://reactnative.dev/docs/text
  */
+const Text: React.AbstractComponent<
+  TextProps,
+  React.ElementRef<typeof NativeText | typeof NativeVirtualText>,
+> = React.forwardRef((props: TextProps, forwardedRef) => {
+  const {
+    accessible,
+    allowFontScaling,
+    ellipsizeMode,
+    onLongPress,
+    onPress,
+    onPressIn,
+    onPressOut,
+    onResponderGrant,
+    onResponderMove,
+    onResponderRelease,
+    onResponderTerminate,
+    onResponderTerminationRequest,
+    onStartShouldSetResponder,
+    pressRetentionOffset,
+    suppressHighlighting,
+    ...restProps
+  } = props;
 
-var Text = React.createClass({
+  const [isHighlighted, setHighlighted] = useState(false);
 
-  mixins: [Touchable.Mixin, NativeMethodsMixin],
+  const _disabled =
+    restProps.disabled != null
+      ? restProps.disabled
+      : props.accessibilityState?.disabled;
+  const _accessibilityState =
+    _disabled !== props.accessibilityState?.disabled
+      ? {...props.accessibilityState, disabled: _disabled}
+      : props.accessibilityState;
 
-  propTypes: {
-    /**
-     * Used to truncate the text with an elipsis after computing the text
-     * layout, including line wrapping, such that the total number of lines
-     * does not exceed this number.
-     */
-    numberOfLines: React.PropTypes.number,
-    /**
-     * Invoked on mount and layout changes with
-     *
-     *   `{nativeEvent: {layout: {x, y, width, height}}}`
-     */
-    onLayout: React.PropTypes.func,
-    /**
-     * This function is called on press.
-     */
-    onPress: React.PropTypes.func,
-    /**
-     * When true, no visual change is made when text is pressed down. By
-     * default, a gray oval highlights the text on press down.
-     * @platform ios
-     */
-    suppressHighlighting: React.PropTypes.bool,
-    style: stylePropType,
-    /**
-     * Used to locate this view in end-to-end tests.
-     */
-    testID: React.PropTypes.string,
-    /**
-     * Specifies should fonts scale to respect Text Size accessibility setting on iOS.
-     */
-    allowFontScaling: React.PropTypes.bool,
-  },
+  const isPressable =
+    (onPress != null ||
+      onLongPress != null ||
+      onStartShouldSetResponder != null) &&
+    _disabled !== true;
 
-  viewConfig: viewConfig,
+  const initialized = useLazyInitialization(isPressable);
+  const config = useMemo(
+    () =>
+      initialized
+        ? {
+            disabled: !isPressable,
+            pressRectOffset: pressRetentionOffset,
+            onLongPress,
+            onPress,
+            onPressIn(event: PressEvent) {
+              setHighlighted(!suppressHighlighting);
+              onPressIn?.(event);
+            },
+            onPressOut(event: PressEvent) {
+              setHighlighted(false);
+              onPressOut?.(event);
+            },
+            onResponderTerminationRequest_DEPRECATED:
+              onResponderTerminationRequest,
+            onStartShouldSetResponder_DEPRECATED: onStartShouldSetResponder,
+          }
+        : null,
+    [
+      initialized,
+      isPressable,
+      pressRetentionOffset,
+      onLongPress,
+      onPress,
+      onPressIn,
+      onPressOut,
+      onResponderTerminationRequest,
+      onStartShouldSetResponder,
+      suppressHighlighting,
+    ],
+  );
 
-  getInitialState: function(): Object {
-    return merge(this.touchableGetInitialState(), {
-      isHighlighted: false,
-    });
-  },
-  
-  getDefaultProps: function(): Object {
-    return {
-      allowFontScaling: true,
-    };
-  },
+  const eventHandlers = usePressability(config);
+  const eventHandlersForText = useMemo(
+    () =>
+      eventHandlers == null
+        ? null
+        : {
+            onResponderGrant(event: PressEvent) {
+              eventHandlers.onResponderGrant(event);
+              if (onResponderGrant != null) {
+                onResponderGrant(event);
+              }
+            },
+            onResponderMove(event: PressEvent) {
+              eventHandlers.onResponderMove(event);
+              if (onResponderMove != null) {
+                onResponderMove(event);
+              }
+            },
+            onResponderRelease(event: PressEvent) {
+              eventHandlers.onResponderRelease(event);
+              if (onResponderRelease != null) {
+                onResponderRelease(event);
+              }
+            },
+            onResponderTerminate(event: PressEvent) {
+              eventHandlers.onResponderTerminate(event);
+              if (onResponderTerminate != null) {
+                onResponderTerminate(event);
+              }
+            },
+            onClick: eventHandlers.onClick,
+            onResponderTerminationRequest:
+              eventHandlers.onResponderTerminationRequest,
+            onStartShouldSetResponder: eventHandlers.onStartShouldSetResponder,
+          },
+    [
+      eventHandlers,
+      onResponderGrant,
+      onResponderMove,
+      onResponderRelease,
+      onResponderTerminate,
+    ],
+  );
 
-  onStartShouldSetResponder: function(): bool {
-    var shouldSetFromProps = this.props.onStartShouldSetResponder &&
-      this.props.onStartShouldSetResponder();
-    return shouldSetFromProps || !!this.props.onPress;
-  },
+  // TODO: Move this processing to the view configuration.
+  const selectionColor =
+    restProps.selectionColor == null
+      ? null
+      : processColor(restProps.selectionColor);
 
-  /*
-   * Returns true to allow responder termination
-   */
-  handleResponderTerminationRequest: function(): bool {
-    // Allow touchable or props.onResponderTerminationRequest to deny
-    // the request
-    var allowTermination = this.touchableHandleResponderTerminationRequest();
-    if (allowTermination && this.props.onResponderTerminationRequest) {
-      allowTermination = this.props.onResponderTerminationRequest();
+  let style = restProps.style;
+  if (__DEV__) {
+    if (PressabilityDebug.isEnabled() && onPress != null) {
+      style = StyleSheet.compose(restProps.style, {
+        color: 'magenta',
+      });
     }
-    return allowTermination;
-  },
+  }
 
-  handleResponderGrant: function(e: SyntheticEvent, dispatchID: string) {
-    this.touchableHandleResponderGrant(e, dispatchID);
-    this.props.onResponderGrant &&
-      this.props.onResponderGrant.apply(this, arguments);
-  },
+  let numberOfLines = restProps.numberOfLines;
+  if (numberOfLines != null && !(numberOfLines >= 0)) {
+    console.error(
+      `'numberOfLines' in <Text> must be a non-negative number, received: ${numberOfLines}. The value will be set to 0.`,
+    );
+    numberOfLines = 0;
+  }
 
-  handleResponderMove: function(e: SyntheticEvent) {
-    this.touchableHandleResponderMove(e);
-    this.props.onResponderMove &&
-      this.props.onResponderMove.apply(this, arguments);
-  },
+  const hasTextAncestor = useContext(TextAncestor);
 
-  handleResponderRelease: function(e: SyntheticEvent) {
-    this.touchableHandleResponderRelease(e);
-    this.props.onResponderRelease &&
-      this.props.onResponderRelease.apply(this, arguments);
-  },
+  const _accessible = Platform.select({
+    ios: accessible !== false,
+    default: accessible,
+  });
 
-  handleResponderTerminate: function(e: SyntheticEvent) {
-    this.touchableHandleResponderTerminate(e);
-    this.props.onResponderTerminate &&
-      this.props.onResponderTerminate.apply(this, arguments);
-  },
-
-  touchableHandleActivePressIn: function() {
-    if (this.props.suppressHighlighting || !this.props.onPress) {
-      return;
-    }
-    this.setState({
-      isHighlighted: true,
-    });
-  },
-
-  touchableHandleActivePressOut: function() {
-    if (this.props.suppressHighlighting || !this.props.onPress) {
-      return;
-    }
-    this.setState({
-      isHighlighted: false,
-    });
-  },
-
-  touchableHandlePress: function() {
-    this.props.onPress && this.props.onPress();
-  },
-
-  touchableGetPressRectOffset: function(): RectOffset {
-    return PRESS_RECT_OFFSET;
-  },
-
-  getChildContext: function(): Object {
-    return {isInAParentText: true};
-  },
-
-  childContextTypes: {
-    isInAParentText: React.PropTypes.bool
-  },
-
-  render: function() {
-    var props = {};
-    for (var key in this.props) {
-      props[key] = this.props[key];
-    }
-    // Text is accessible by default
-    if (props.accessible !== false) {
-      props.accessible = true;
-    }
-    props.isHighlighted = this.state.isHighlighted;
-    props.onStartShouldSetResponder = this.onStartShouldSetResponder;
-    props.onResponderTerminationRequest =
-      this.handleResponderTerminationRequest;
-    props.onResponderGrant = this.handleResponderGrant;
-    props.onResponderMove = this.handleResponderMove;
-    props.onResponderRelease = this.handleResponderRelease;
-    props.onResponderTerminate = this.handleResponderTerminate;
-
-    // TODO: Switch to use contextTypes and this.context after React upgrade
-    var context = ReactInstanceMap.get(this)._context;
-    if (context.isInAParentText) {
-      return <RCTVirtualText {...props} />;
-    } else {
-      return <RCTText {...props} />;
-    }
-  },
+  return hasTextAncestor ? (
+    <NativeVirtualText
+      {...restProps}
+      {...eventHandlersForText}
+      isHighlighted={isHighlighted}
+      isPressable={isPressable}
+      numberOfLines={numberOfLines}
+      selectionColor={selectionColor}
+      style={style}
+      ref={forwardedRef}
+    />
+  ) : (
+    <TextAncestor.Provider value={true}>
+      <NativeText
+        {...restProps}
+        {...eventHandlersForText}
+        disabled={_disabled}
+        accessible={_accessible}
+        accessibilityState={_accessibilityState}
+        allowFontScaling={allowFontScaling !== false}
+        ellipsizeMode={ellipsizeMode ?? 'tail'}
+        isHighlighted={isHighlighted}
+        numberOfLines={numberOfLines}
+        selectionColor={selectionColor}
+        style={style}
+        ref={forwardedRef}
+      />
+    </TextAncestor.Provider>
+  );
 });
 
-type RectOffset = {
-  top: number;
-  left: number;
-  right: number;
-  bottom: number;
-}
+Text.displayName = 'Text';
 
-var PRESS_RECT_OFFSET = {top: 20, left: 20, right: 20, bottom: 30};
-
-var RCTText = createReactNativeComponentClass(viewConfig);
-var RCTVirtualText = RCTText;
-
-if (Platform.OS === 'android') {
-  RCTVirtualText = createReactNativeComponentClass({
-    validAttributes: merge(ReactNativeViewAttributes.UIView, {
-      isHighlighted: true,
-    }),
-    uiViewClassName: 'RCTVirtualText',
-  });
+/**
+ * Returns false until the first time `newValue` is true, after which this will
+ * always return true. This is necessary to lazily initialize `Pressability` so
+ * we do not eagerly create one for every pressable `Text` component.
+ */
+function useLazyInitialization(newValue: boolean): boolean {
+  const [oldValue, setValue] = useState(newValue);
+  if (!oldValue && newValue) {
+    setValue(newValue);
+  }
+  return oldValue;
 }
 
 module.exports = Text;

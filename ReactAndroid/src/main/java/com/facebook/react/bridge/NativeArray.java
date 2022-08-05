@@ -1,36 +1,28 @@
-/**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.react.bridge;
 
 import com.facebook.jni.HybridData;
 import com.facebook.proguard.annotations.DoNotStrip;
-import com.facebook.soloader.SoLoader;
 
-/**
- * Base class for an array whose members are stored in native code (C++).
- */
+/** Base class for an array whose members are stored in native code (C++). */
 @DoNotStrip
-public abstract class NativeArray {
+public abstract class NativeArray implements NativeArrayInterface {
   static {
-    SoLoader.loadLibrary(ReactBridge.REACT_NATIVE_LIB);
+    ReactBridge.staticInit();
   }
 
-  public NativeArray() {
-    mHybridData = initHybrid();
+  protected NativeArray(HybridData hybridData) {
+    mHybridData = hybridData;
   }
 
   @Override
   public native String toString();
 
-  private native HybridData initHybrid();
-
-  @DoNotStrip
-  private HybridData mHybridData;
+  @DoNotStrip private HybridData mHybridData;
 }

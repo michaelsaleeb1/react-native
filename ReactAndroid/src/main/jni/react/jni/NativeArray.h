@@ -1,36 +1,42 @@
-// Copyright 2004-present Facebook. All Rights Reserved.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
 #pragma once
 
-#include <jni/fbjni.h>
-#include <react/MethodCall.h>
+#include <fbjni/fbjni.h>
+#include <folly/dynamic.h>
+
+#include "NativeCommon.h"
 
 namespace facebook {
 namespace react {
 
-struct NativeArray : public jni::HybridClass<NativeArray> {
-  static constexpr const char* kJavaDescriptor = "Lcom/facebook/react/bridge/NativeArray;";
+class NativeArray : public jni::HybridClass<NativeArray> {
+ public:
+  static constexpr const char *kJavaDescriptor =
+      "Lcom/facebook/react/bridge/NativeArray;";
 
-  static jni::local_ref<jhybriddata> initHybrid(jni::alias_ref<jhybridobject>) {
-    return makeCxxInstance();
-  }
+  jni::local_ref<jstring> toString();
 
-  // Whether this array has been added to another array or map and no longer has a valid array value
-  bool isConsumed = false;
-  folly::dynamic array = {};
+  RN_EXPORT folly::dynamic consume();
 
-  jstring toString();
+  // Whether this array has been added to another array or map and no longer
+  // has a valid array value.
+  bool isConsumed;
+  void throwIfConsumed();
 
-  static void registerNatives() {
-    registerHybrid({
-        makeNativeMethod("initHybrid", NativeArray::initHybrid),
-        makeNativeMethod("toString", NativeArray::toString),
-      });
-  }
+  static void registerNatives();
+
+ protected:
+  folly::dynamic array_;
+
+  friend HybridBase;
+  explicit NativeArray(folly::dynamic array);
 };
 
-__attribute__((visibility("default")))
-jni::local_ref<NativeArray::jhybridobject>
-createReadableNativeArrayWithContents(folly::dynamic array);
-
-}}
+} // namespace react
+} // namespace facebook

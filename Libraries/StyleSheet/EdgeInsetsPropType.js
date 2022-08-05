@@ -1,25 +1,18 @@
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  *
- * @providesModule EdgeInsetsPropType
- * @flow
+ * @format
+ * @flow strict
  */
+
 'use strict';
 
-var PropTypes = require('ReactPropTypes');
+import type {Rect, RectOrSize} from './Rect';
 
-var createStrictShapeTypeChecker = require('createStrictShapeTypeChecker');
-
-var EdgeInsetsPropType = createStrictShapeTypeChecker({
-  top: PropTypes.number,
-  left: PropTypes.number,
-  bottom: PropTypes.number,
-  right: PropTypes.number,
-});
-
-module.exports = EdgeInsetsPropType;
+// TODO: allow all EdgeInsets-like property to be set using a single number
+// and unify EdgeInsetsProp with EdgeInsetsOrSizeProp
+export type EdgeInsetsProp = Rect;
+export type EdgeInsetsOrSizeProp = RectOrSize;

@@ -1,30 +1,28 @@
-/**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 package com.facebook.systrace;
 
-/**
- * Systrace stub.
- */
+import java.util.ArrayList;
+import java.util.List;
+
 public final class SystraceMessage {
 
-  private static final Builder NOOP_BUILDER = new NoopBuilder();
+  public static Boolean INCLUDE_ARGS = false;
 
   public static Builder beginSection(long tag, String sectionName) {
-    return NOOP_BUILDER;
+    return new StartSectionBuilder(tag, sectionName);
   }
 
   public static Builder endSection(long tag) {
-    return NOOP_BUILDER;
+    return new EndSectionBuilder(tag);
   }
 
-  public static abstract class Builder {
+  public abstract static class Builder {
 
     public abstract void flush();
 
@@ -37,13 +35,63 @@ public final class SystraceMessage {
     public abstract Builder arg(String key, double value);
   }
 
-  private interface Flusher {
-    void flush(StringBuilder builder);
-  }
+  private static class StartSectionBuilder extends Builder {
+    private String mSectionName;
+    private long mTag;
+    private List<String> mArgs = new ArrayList<>();
 
-  private static class NoopBuilder extends Builder {
+    public StartSectionBuilder(long tag, String sectionName) {
+      mTag = tag;
+      mSectionName = sectionName;
+    }
+
     @Override
     public void flush() {
+      Systrace.beginSection(
+          mTag,
+          mSectionName
+              + (INCLUDE_ARGS && mArgs.size() > 0 ? (" (" + String.join(", ", mArgs) + ")") : ""));
+    }
+
+    @Override
+    public Builder arg(String key, Object value) {
+      addArg(key, String.valueOf(value));
+      return this;
+    }
+
+    @Override
+    public Builder arg(String key, int value) {
+      addArg(key, String.valueOf(value));
+      return this;
+    }
+
+    @Override
+    public Builder arg(String key, long value) {
+      addArg(key, String.valueOf(value));
+      return this;
+    }
+
+    @Override
+    public Builder arg(String key, double value) {
+      addArg(key, String.valueOf(value));
+      return this;
+    }
+
+    private void addArg(String key, String value) {
+      mArgs.add(key + ": " + value);
+    }
+  }
+
+  private static class EndSectionBuilder extends Builder {
+    private long mTag;
+
+    public EndSectionBuilder(long tag) {
+      mTag = tag;
+    }
+
+    @Override
+    public void flush() {
+      Systrace.endSection(mTag);
     }
 
     @Override

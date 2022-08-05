@@ -1,24 +1,20 @@
-
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  *
- * @providesModule ProgressViewIOS
+ * @format
  */
 
 'use strict';
+import * as React from 'react';
+import StyleSheet from '../../StyleSheet/StyleSheet';
+import Text from '../../Text/Text';
+import View from '../View/View';
 
-var React = require('React');
-var StyleSheet = require('StyleSheet');
-var Text = require('Text');
-var View = require('View');
-
-var DummyProgressViewIOS = React.createClass({
-  render: function() {
+class DummyProgressViewIOS extends React.Component {
+  render() {
     return (
       <View style={[styles.dummy, this.props.style]}>
         <Text style={styles.text}>
@@ -26,10 +22,10 @@ var DummyProgressViewIOS = React.createClass({
         </Text>
       </View>
     );
-  },
-});
+  }
+}
 
-var styles = StyleSheet.create({
+const styles = StyleSheet.create({
   dummy: {
     width: 120,
     height: 20,
@@ -43,7 +39,7 @@ var styles = StyleSheet.create({
     color: '#333333',
     margin: 5,
     fontSize: 10,
-  }
+  },
 });
 
 module.exports = DummyProgressViewIOS;

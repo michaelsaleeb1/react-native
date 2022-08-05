@@ -1,82 +1,99 @@
-/**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 #import <QuartzCore/QuartzCore.h>
 
+#import "RCTLog.h"
 #import "RCTPerformanceLogger.h"
+#import "RCTPerformanceLoggerLabels.h"
+#import "RCTProfile.h"
 #import "RCTRootView.h"
 
-static int64_t RCTPLData[RCTPLSize][2] = {};
-
-void RCTPerformanceLoggerStart(RCTPLTag tag)
-{
-  RCTPLData[tag][0] = CACurrentMediaTime() * 1000;
+@interface RCTPerformanceLogger () {
+  int64_t _data[RCTPLSize][2];
+  NSInteger _cookies[RCTPLSize];
 }
-
-void RCTPerformanceLoggerEnd(RCTPLTag tag)
-{
-  RCTPLData[tag][1] = CACurrentMediaTime() * 1000;
-}
-
-NSArray *RCTPerformanceLoggerOutput(void)
-{
-  return @[
-    @(RCTPLData[RCTPLScriptDownload][0]),
-    @(RCTPLData[RCTPLScriptDownload][1]),
-    @(RCTPLData[RCTPLScriptExecution][0]),
-    @(RCTPLData[RCTPLScriptExecution][1]),
-    @(RCTPLData[RCTPLNativeModuleInit][0]),
-    @(RCTPLData[RCTPLNativeModuleInit][1]),
-    @(RCTPLData[RCTPLTTI][0]),
-    @(RCTPLData[RCTPLTTI][1]),
-  ];
-}
-
-@interface RCTPerformanceLogger : NSObject <RCTBridgeModule>
 
 @end
 
 @implementation RCTPerformanceLogger
 
-RCT_EXPORT_MODULE()
-
-@synthesize bridge = _bridge;
-
-- (instancetype)init
+- (void)markStartForTag:(RCTPLTag)tag
 {
-  if ((self = [super init])) {
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(sendTimespans)
-                                                 name:RCTContentDidAppearNotification
-                                               object:nil];
+#if RCT_PROFILE
+  if (RCTProfileIsProfiling()) {
+    NSString *label = RCTPLLabelForTag(tag);
+    _cookies[tag] = RCTProfileBeginAsyncEvent(RCTProfileTagAlways, label, nil);
   }
-  return self;
+#endif
+  _data[tag][0] = CACurrentMediaTime() * 1000;
+  _data[tag][1] = 0;
 }
 
-- (void)dealloc
+- (void)markStopForTag:(RCTPLTag)tag
 {
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
+#if RCT_PROFILE
+  if (RCTProfileIsProfiling()) {
+    NSString *label = RCTPLLabelForTag(tag);
+    RCTProfileEndAsyncEvent(RCTProfileTagAlways, @"native", _cookies[tag], label, @"RCTPerformanceLogger");
+  }
+#endif
+  if (_data[tag][0] != 0 && _data[tag][1] == 0) {
+    _data[tag][1] = CACurrentMediaTime() * 1000;
+  } else {
+    RCTLogInfo(@"Unbalanced calls start/end for tag %li", (unsigned long)tag);
+  }
 }
 
-- (void)sendTimespans
+- (void)setValue:(int64_t)value forTag:(RCTPLTag)tag
 {
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
+  _data[tag][0] = 0;
+  _data[tag][1] = value;
+}
 
-  [_bridge enqueueJSCall:@"PerformanceLogger.addTimespans" args:@[
-    RCTPerformanceLoggerOutput(),
-    @[
-      @"ScriptDownload",
-      @"ScriptExecution",
-      @"NativeModuleInit",
-      @"TTI",
-    ],
-  ]];
+- (void)addValue:(int64_t)value forTag:(RCTPLTag)tag
+{
+  _data[tag][0] = 0;
+  _data[tag][1] += value;
+}
+
+- (void)appendStartForTag:(RCTPLTag)tag
+{
+  _data[tag][0] = CACurrentMediaTime() * 1000;
+}
+
+- (void)appendStopForTag:(RCTPLTag)tag
+{
+  if (_data[tag][0] != 0) {
+    _data[tag][1] += CACurrentMediaTime() * 1000 - _data[tag][0];
+    _data[tag][0] = 0;
+  } else {
+    RCTLogInfo(@"Unbalanced calls start/end for tag %li", (unsigned long)tag);
+  }
+}
+
+- (NSArray<NSNumber *> *)valuesForTags
+{
+  NSMutableArray *result = [NSMutableArray array];
+  for (NSUInteger index = 0; index < RCTPLSize; index++) {
+    [result addObject:@(_data[index][0])];
+    [result addObject:@(_data[index][1])];
+  }
+  return result;
+}
+
+- (int64_t)durationForTag:(RCTPLTag)tag
+{
+  return _data[tag][1] - _data[tag][0];
+}
+
+- (int64_t)valueForTag:(RCTPLTag)tag
+{
+  return _data[tag][1];
 }
 
 @end

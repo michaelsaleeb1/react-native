@@ -1,45 +1,93 @@
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  *
- * @providesModule RCTNetworking
+ * @format
+ * @flow
  */
-'use strict';
 
 // Do not require the native RCTNetworking module directly! Use this wrapper module instead.
 // It will add the necessary requestId, so that you don't have to generate it yourself.
-var RCTNetworkingNative = require('NativeModules').Networking;
+import NativeEventEmitter from '../EventEmitter/NativeEventEmitter';
+import NativeNetworkingAndroid from './NativeNetworkingAndroid';
+import convertRequestBody from './convertRequestBody';
+import type {RequestBody} from './convertRequestBody';
+import Platform from '../Utilities/Platform';
 
-var _requestId = 1;
-var generateRequestId = function() {
+type Header = [string, string];
+
+// Convert FormData headers to arrays, which are easier to consume in
+// native on Android.
+function convertHeadersMapToArray(headers: Object): Array<Header> {
+  const headerArray = [];
+  for (const name in headers) {
+    headerArray.push([name, headers[name]]);
+  }
+  return headerArray;
+}
+
+let _requestId = 1;
+function generateRequestId(): number {
   return _requestId++;
-};
+}
 
 /**
  * This class is a wrapper around the native RCTNetworking module. It adds a necessary unique
  * requestId to each network request that can be used to abort that request later on.
  */
-class RCTNetworking {
+// FIXME: use typed events
+class RCTNetworking extends NativeEventEmitter<$FlowFixMe> {
+  constructor() {
+    super(
+      // T88715063: NativeEventEmitter only used this parameter on iOS. Now it uses it on all platforms, so this code was modified automatically to preserve its behavior
+      // If you want to use the native module on other platforms, please remove this condition and test its behavior
+      Platform.OS !== 'ios' ? null : NativeNetworkingAndroid,
+    );
+  }
 
-  static sendRequest(method, url, headers, data, callback) {
-    var requestId = generateRequestId();
-    RCTNetworkingNative.sendRequest(
+  sendRequest(
+    method: string,
+    trackingName: string,
+    url: string,
+    headers: Object,
+    data: RequestBody,
+    responseType: 'text' | 'base64',
+    incrementalUpdates: boolean,
+    timeout: number,
+    callback: (requestId: number) => mixed,
+    withCredentials: boolean,
+  ) {
+    const body = convertRequestBody(data);
+    if (body && body.formData) {
+      body.formData = body.formData.map(part => ({
+        ...part,
+        headers: convertHeadersMapToArray(part.headers),
+      }));
+    }
+    const requestId = generateRequestId();
+    NativeNetworkingAndroid.sendRequest(
       method,
       url,
       requestId,
-      headers,
-      data,
-      callback);
-    return requestId;
+      convertHeadersMapToArray(headers),
+      {...body, trackingName},
+      responseType,
+      incrementalUpdates,
+      timeout,
+      withCredentials,
+    );
+    callback(requestId);
   }
 
-  static abortRequest(requestId) {
-    RCTNetworkingNative.abortRequest(requestId);
+  abortRequest(requestId: number) {
+    NativeNetworkingAndroid.abortRequest(requestId);
+  }
+
+  clearCookies(callback: (result: boolean) => any) {
+    NativeNetworkingAndroid.clearCookies(callback);
   }
 }
 
-module.exports = RCTNetworking;
+module.exports = (new RCTNetworking(): RCTNetworking);
